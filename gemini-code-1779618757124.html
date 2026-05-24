@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pak Fighters: F-16 Falcon Strike</title>
+    <style>
+        body, html { 
+            margin: 0; padding: 0; overflow: hidden; background: #000; color: #0f0; 
+            font-family: 'Courier New', monospace; touch-action: none; 
+            -webkit-user-select: none; user-select: none;
+        }
+        canvas { display: block; }
+        
+        /* Home Screen Control Array */
+        #overlay { 
+            position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.8)), url('https://images.unsplash.com/photo-1560934065-27a364bc9123?q=80&w=2000&auto=format&fit=crop');
+            background-size: cover; background-position: center; z-index: 100; text-align: center; 
+        }
+
+        .btn { 
+            background: #0f0; color: #000; border: none; padding: 14px 30px; margin: 8px; 
+            cursor: pointer; font-size: 18px; font-weight: bold; width: 300px; 
+            box-shadow: 0 0 20px rgba(0,255,0,0.4); text-transform: uppercase; border-radius: 4px;
+            font-family: 'Courier New', monospace; transition: 0.2s;
+        }
+        .btn:hover { background: #fff; box-shadow: 0 0 30px #fff; }
+        
+        /* Skin Selector Dock Array */
+        .skin-container { 
+            position: absolute; bottom: 20px; display: flex; gap: 10px; overflow-x: auto; 
+            padding: 15px; width: 85%; max-width: 700px; background: rgba(0,0,0,0.85); border: 2px solid #0f0; border-radius: 8px;
+        }
+        .skin-box { flex: 0 0 55px; height: 40px; border: 2px solid #444; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: bold; border-radius: 3px; }
+        .skin-box.active { border-color: #fff; box-shadow: 0 0 10px #fff; }
+
+        /* HUD Matrix Layout */
+        .hud { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-between; padding: 0 25px; box-sizing: border-box; pointer-events: none; z-index: 40; }
+        .hp-bar-bg { width: 130px; height: 14px; background: rgba(255,255,255,0.1); border: 1px solid #fff; margin-top: 4px; }
+        .hp-bar-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        
+        #ingame-controls { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; z-index: 50; flex-wrap: wrap; justify-content: center; width: 95%; }
+        .mini-btn { background: rgba(0,255,0,0.15); border: 1px solid #0f0; color: #0f0; padding: 6px 12px; cursor: pointer; font-size: 11px; font-weight: bold; text-transform: uppercase; font-family: 'Courier New', monospace; }
+
+        /* Mobile Layout Overlay mapping */
+        #mobile-controls { position: absolute; bottom: 40px; width: 100%; display: none; justify-content: space-between; padding: 0 35px; box-sizing: border-box; pointer-events: none; z-index: 60; }
+        .joy-area { width: 120px; height: 120px; background: rgba(255,255,255,0.1); border: 2px solid rgba(0, 255, 0, 0.4); border-radius: 50%; position: relative; pointer-events: auto; }
+        .joy-stick { width: 50px; height: 50px; background: #0f0; border-radius: 50%; position: absolute; top: 35px; left: 35px; box-shadow: 0 0 15px #0f0; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; pointer-events: auto; }
+        .m-btn { width: 80px; height: 80px; border-radius: 50%; border: 2px solid #0f0; color: #0f0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; background: rgba(0,255,0,0.1); box-shadow: 0 0 10px rgba(0,255,0,0.2); }
+        
+        #win-screen { position: absolute; inset: 0; background: rgba(0,0,0,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 200; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <!-- Main Entry Point Menu (All inline onclicks removed for strict JS binding) -->
+    <div id="overlay">
+        <h1 style="color:#0f0; font-size: 55px; margin-bottom: 0; text-shadow: 0 0 20px #000; letter-spacing: 2px;">PAK FIGHTERS</h1>
+        <p style="color:#fff; letter-spacing: 6px; margin-bottom: 35px; text-shadow: 2px 2px 5px #000; font-weight: bold;">F-16 FALCON STRIKE</p>
+        
+        <button class="btn" id="btn-desktop">PC MODE (MOUSE + SPACE)</button>
+        <button class="btn" id="btn-mobile" style="background:#00ff55; color:#000;">MOBILE INTERFACE (JOYSTICK)</button>
+        <button class="btn" id="btn-1v1" style="background:#0044ff; color:#fff; box-shadow: 0 0 20px rgba(0,68,255,0.5);">1V1 DUEL MODE</button>
+
+        <div class="skin-container" id="skin-list"></div>
+    </div>
+
+    <!-- Active Sorting Setup UI -->
+    <div id="ingame-controls">
+        <button class="mini-btn" id="diff-btn">EASY</button>
+        <button class="mini-btn" id="bot-m-toggle">BOT MISSILES: ON</button>
+        <button class="mini-btn" id="paint-btn">PAINT SCHEME</button>
+        <button class="mini-btn" id="abort-btn" style="color:#ff0000; border-color:#ff0000">ABORT</button>
+    </div>
+
+    <!-- Terminal Alert HUD -->
+    <div id="win-screen">
+        <h1 id="win-msg" style="font-size: 50px; color: #0f0;"></h1>
+        <p style="color: #fff; font-size: 18px;">RE-ARMING SORTIE...</p>
+    </div>
+
+    <!-- Status Tracking HUD -->
+    <div class="hud" id="hud" style="display:none">
+        <div>F-16 (P1)<div class="hp-bar-bg"><div id="p1-fill" class="hp-bar-fill"></div></div><small id="p1-m">MISSILES: 5</small></div>
+        <div>BANDIT<div class="hp-bar-bg"><div id="p2-fill" class="hp-bar-fill" style="background:#f00"></div></div><small id="p2-m">MISSILES: 5</small></div>
+    </div>
+
+    <!-- Screen Touch Elements Layout Map -->
+    <div id="mobile-controls">
+        <div class="joy-area" id="joy-base"><div class="joy-stick" id="joy-thumb"></div></div>
+        <div class="btn-group">
+            <div class="m-btn" id="m-boost" style="background:rgba(255,255,255,0.25); border-color:#fff; color:#fff;">HIGH BOOST</div>
+            <div class="m-btn" id="m-missile" style="border-color:#ff8800; color:#ff8800">MISSILE</div>
+            <div class="m-btn" id="m-fire">CANNON</div>
+        </div>
+    </div>
+
+    <canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let running = false, gameMode = 'desktop', p1Color = '#0ff';
+let botCanMissile = true;
+let controlType = 'desktop';
+
+let difficulties = [
+    { name: 'EASY', turn: 0.04, acc: 0.15, rate: 65, mRate: 200 },
+    { name: 'MID', turn: 0.07, acc: 0.25, rate: 45, mRate: 130 },
+    { name: 'HARD', turn: 0.12, acc: 0.45, rate: 25, mRate: 90 }
+];
+let diffIdx = 0; 
+
+const p1 = { x: 0, y: 0, ang: 0, vx: 0, vy: 0, hp: 100, missiles: 5, mTimer: 0, bst: 0 };
+const p2 = { x: 0, y: 0, ang: Math.PI, vx: 0, vy: 0, hp: 100, missiles: 5, bst: 0, shotT: 0, misT: 0, type: 'bot' };
+let bullets = [], stars = [], keys = {};
+let joy = { active: false, angle: 0 };
+
+const skins = ['#0ff','#ffd700','#ff3333','#ffffff','#00ff55','#ffaa00','#9d00ff','#5588ff','#00ffff','#ff55ff','#008800','#aa0000','#333333','#ff00ff','#00ccff','#666666','#0044ff','#ffff00','#ff5500','#00ff00','#ff99cc'];
+let currentSkinIdx = 0;
+
+// Re-engineered Skin Selector Configuration Array
+const skinList = document.getElementById('skin-list');
+skins.forEach((c, i) => {
+    const box = document.createElement('div');
+    box.className = 'skin-box' + (i === 0 ? ' active' : '');
+    box.style.background = c;
+    
+    const selectSkin = (e) => {
+        if(e) e.preventDefault();
+        p1Color = c; currentSkinIdx = i;
+        document.querySelectorAll('.skin-box').forEach(b => b.classList.remove('active'));
+        box.classList.add('active');
+    };
+    box.addEventListener('touchstart', selectSkin, { passive: false });
+    box.addEventListener('click', selectSkin);
+    skinList.appendChild(box);
+});
+
+function cycleSkin() {
+    currentSkinIdx = (currentSkinIdx + 1) % skins.length;
+    p1Color = skins[currentSkinIdx];
+    document.getElementById('p1-fill').style.background = p1Color;
+}
+
+function cycleDifficulty() {
+    diffIdx = (diffIdx + 1) % difficulties.length;
+    document.getElementById('diff-btn').innerText = difficulties[diffIdx].name;
+}
+
+function toggleBotMissiles() {
+    botCanMissile = !botCanMissile;
+    document.getElementById('bot-m-toggle').innerText = `BOT MISSILES: ${botCanMissile ? 'ON' : 'OFF'}`;
+}
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', () => { if(running) resizeCanvas(); });
+
+// Main Core Engine Initialization
+function initSortie(selection) {
+    if (running) return;
+    gameMode = selection;
+    
+    if (selection === 'mobile') {
+        controlType = 'mobile';
+        p2.type = 'bot';
+    } else if (selection === 'desktop') {
+        controlType = 'desktop';
+        p2.type = 'bot';
+    } else if (selection === '1v1') {
+        controlType = 'desktop';
+        p2.type = 'player';
+    }
+
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('hud').style.display = 'flex';
+    document.getElementById('ingame-controls').style.display = 'flex';
+    document.getElementById('p1-fill').style.background = p1Color;
+    
+    if(controlType === 'mobile') {
+        document.getElementById('mobile-controls').style.display = 'flex';
+    } else {
+        document.getElementById('mobile-controls').style.display = 'none';
+    }
+    
+    resizeCanvas();
+    resetEntities();
+    stars = Array.from({length: 120}, () => ({x: Math.random()*canvas.width, y: Math.random()*canvas.height, s: Math.random()*2}));
+    running = true; 
+    requestAnimationFrame(loop);
+}
+
+// STABILIZED DUAL-HOOK MENU EVENT INTERFACES
+const registerMenuButton = (id, targetMode) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    
+    element.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        initSortie(targetMode);
+    }, { passive: false });
+    
+    element.addEventListener('click', (e) => {
+        e.preventDefault();
+        initSortie(targetMode);
+    });
+};
+
+registerMenuButton('btn-desktop', 'desktop');
+registerMenuButton('btn-mobile', 'mobile');
+registerMenuButton('btn-1v1', '1v1');
+
+function resetEntities() {
+    p1.x = 150; p1.y = canvas.height/2; p1.hp = 100; p1.vx = 0; p1.vy = 0; p1.ang = 0; p1.missiles = 5; p1.mTimer = 0; p1.bst = 0;
+    p2.x = canvas.width - 150; p2.y = canvas.height/2; p2.hp = 100; p2.vx = 0; p2.vy = 0; p2.ang = Math.PI; p2.missiles = 5; p2.bst = 0;
+    bullets = [];
+}
+
+function abortMission() {
+    running = false;
+    document.getElementById('overlay').style.display = 'flex';
+    document.getElementById('hud').style.display = 'none';
+    document.getElementById('ingame-controls').style.display = 'none';
+    document.getElementById('mobile-controls').style.display = 'none';
+    document.getElementById('win-screen').style.display = 'none';
+}
+
+// In-Game Dashboard Event Listeners Injection
+const bindInGame = (id, handler) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); handler(); }, { passive: false });
+    el.addEventListener('click', (e) => { e.preventDefault(); handler(); });
+};
+
+bindInGame('abort-btn', abortMission);
+bindInGame('diff-btn', cycleDifficulty);
+bindInGame('bot-m-toggle', toggleBotMissiles);
+bindInGame('paint-btn', cycleSkin);
+
+// Desktop Global Keyboard / Mouse Events Array
+window.onkeydown = e => { 
+    keys[e.code] = true;
+    if(controlType === 'desktop') {
+        if(e.code === 'Space') fire(p1, 'bullet');
+        if(e.code === 'Enter') fire(p1, 'missile', p2);
+    }
+    if(gameMode === '1v1') {
+        if(e.code === 'Numpad0' || e.code === 'Slash') fire(p2, 'bullet');
+        if(e.code === 'NumpadEnter' || e.code === 'ShiftRight') fire(p2, 'missile', p1);
+    }
+};
+window.onkeyup = e => keys[e.code] = false;
+window.onmousedown = e => { 
+    if(controlType === 'desktop') {
+        if(e.button === 0) p1.bst = 1; 
+        if(e.button === 2) p1.bst = 3; 
+    }
+};
+window.onmouseup = () => { if(controlType === 'desktop') p1.bst = 0; };
+window.onmousemove = e => { window.mx = e.clientX; window.my = e.clientY; };
+
+// High-Precision Mobile Virtual Joystick Tracking Engine
+const joyBase = document.getElementById('joy-base');
+const joyThumb = document.getElementById('joy-thumb');
+
+function handleJoystick(e) {
+    if (!joy.active || !e.touches.length) return;
+    
+    const rect = joyBase.getBoundingClientRect();
+    let touch = null;
+    for(let i=0; i<e.touches.length; i++) {
+        let t = e.touches[i];
+        if(t.clientX >= rect.left - 60 && t.clientX <= rect.right + 60 && t.clientY >= rect.top - 60 && t.clientY <= rect.bottom + 60) {
+            touch = t;
+            break;
+        }
+    }
+    if(!touch) touch = e.touches[0];
+    
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    const dx = touch.clientX - centerX;
+    const dy = touch.clientY - centerY;
+    const distance = Math.hypot(dx, dy);
+    
+    const maxRadius = 45;
+    joy.angle = Math.atan2(dy, dx);
+    
+    const clampedDist = Math.min(distance, maxRadius);
+    const moveX = Math.cos(joy.angle) * clampedDist;
+    const moveY = Math.sin(joy.angle) * clampedDist;
+    
+    joyThumb.style.transform = `translate3d(${moveX}px, ${moveY}px, 0)`;
+    
+    p1.ang = joy.angle; 
+    if(p1.bst !== 3) p1.bst = 1; 
+}
+
+joyBase.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    joy.active = true;
+    handleJoystick(e);
+}, { passive: false });
+
+joyBase.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    handleJoystick(e);
+}, { passive: false });
+
+joyBase.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    joy.active = false;
+    if(p1.bst !== 3) p1.bst = 0;
+    joyThumb.style.transform = 'translate3d(0px, 0px, 0)';
+});
+
+// Mobile Action Buttons Event Subscriptions
+document.getElementById('m-fire').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    fire(p1, 'bullet');
+}, { passive: false });
+
+document.getElementById('m-missile').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    fire(p1, 'missile', p2);
+}, { passive: false });
+
+document.getElementById('m-boost').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    p1.bst = 3;
+}, { passive: false });
+
+document.getElementById('m-boost').addEventListener('touchend', (e) => {
+    e.preventDefault();
+    p1.bst = joy.active ? 1 : 0;
+}, { passive: false });
+
+function fire(who, type, target) {
+    if(who.hp <= 0) return;
+    if(type === 'missile' && who.missiles > 0) {
+        bullets.push({x: who.x, y: who.y, vx: Math.cos(who.ang)*6, vy: Math.sin(who.ang)*6, type: 'missile', target, life: 300, owner: who});
+        who.missiles--;
+    } else if(type === 'bullet') {
+        bullets.push({x: who.x, y: who.y, vx: Math.cos(who.ang)*16, vy: Math.sin(who.ang)*16, type: 'bullet', life: 75, owner: who});
+    }
+}
+
+function drawJet(j, color) {
+    if(j.hp <= 0) return;
+    ctx.save(); ctx.translate(j.x, j.y); ctx.rotate(j.ang);
+    ctx.fillStyle = color + "55"; ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(32,0); ctx.lineTo(-10,-14); ctx.lineTo(-28,-28); ctx.lineTo(-22,-10); ctx.lineTo(-32,-10); ctx.lineTo(-32,10); ctx.lineTo(-22,10); ctx.lineTo(-28,28); ctx.lineTo(-10,14); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    if(j.bst > 0) { 
+        ctx.fillStyle = j.bst === 3 ? '#ffffff' : 'orange'; 
+        ctx.fillRect(-32, -4, -18 * j.bst, 8); 
+    }
+    ctx.restore();
+}
+
+function loop() {
+    if(!running) return;
+    ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#fff'; stars.forEach(s => ctx.fillRect(s.x, s.y, s.s, s.s));
+
+    if(controlType === 'desktop' && gameMode !== '1v1') {
+        p1.ang = Math.atan2(window.my - p1.y, window.mx - p1.x);
+    }
+    
+    if(gameMode === '1v1') {
+        if(keys['KeyA']) p1.ang -= 0.08; if(keys['KeyD']) p1.ang += 0.08;
+        p1.bst = keys['KeyW'] ? 1 : 0;
+        
+        if(keys['ArrowLeft']) p2.ang -= 0.08; if(keys['ArrowRight']) p2.ang += 0.08;
+        p2.bst = keys['ArrowUp'] ? 1 : 0;
+    }
+
+    let p1Acc = p1.bst === 3 ? 1.1 : 0.45;
+    if(p1.bst > 0) { p1.vx += Math.cos(p1.ang)*p1Acc; p1.vy += Math.sin(p1.ang)*p1Acc; }
+    p1.vx *= 0.96; p1.vy *= 0.96; p1.x += p1.vx; p1.y += p1.vy;
+
+    if(p2.type === 'bot') {
+        let d = difficulties[diffIdx];
+        let tAng = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+        let diff = tAng - p2.ang;
+        while(diff < -Math.PI) diff += Math.PI*2; while(diff > Math.PI) diff -= Math.PI*2;
+        p2.ang += diff * d.turn; p2.vx += Math.cos(p2.ang) * d.acc; p2.bst = 1;
+        p2.shotT++; if(p2.shotT > d.rate) { fire(p2, 'bullet'); p2.shotT = 0; }
+        if(botCanMissile) { p2.misT++; if(p2.misT > d.mRate) { fire(p2, 'missile', p1); p2.misT = 0; } }
+    } else {
+        if(p2.bst > 0) { p2.vx += Math.cos(p2.ang)*0.45; p2.vy += Math.sin(p2.ang)*0.45; }
+    }
+    p2.vx *= 0.96; p2.vy *= 0.96; p2.x += p2.vx; p2.y += p2.vy;
+
+    bullets.forEach(b => {
+        if(b.type === 'missile' && b.target && b.target.hp > 0) {
+            let ta = Math.atan2(b.target.y - b.y, b.target.x - b.x);
+            b.vx += Math.cos(ta)*0.95; b.vy += Math.sin(ta)*0.95;
+            let s = Math.hypot(b.vx, b.vy); b.vx = (b.vx/s)*8.5; b.vy = (b.vy/s)*8.5;
+        }
+        b.x += b.vx; b.y += b.vy; b.life--;
+        
+        if(b.type === 'missile') {
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx));
+            ctx.fillStyle = '#fff'; ctx.fillRect(-12, -2, 24, 4);
+            ctx.fillStyle = 'red'; ctx.fillRect(-14, -6, 4, 12); ctx.restore();
+        } else { ctx.fillStyle = '#0f0'; ctx.fillRect(b.x-2, b.y-2, 4, 4); }
+        
+        let damage = b.type === 'missile' ? 20 : 5;
+        if(b.owner !== p1 && Math.hypot(b.x-p1.x, b.y-p1.y) < 25) { p1.hp -= damage; b.life = 0; }
+        if(b.owner !== p2 && Math.hypot(b.x-p2.x, b.y-p2.y) < 25) { p2.hp -= damage; b.life = 0; }
+    });
+    bullets = bullets.filter(b => b.life > 0);
+
+    [p1, p2].forEach(j => { if(j.x<0)j.x=canvas.width; if(j.x>canvas.width)j.x=0; if(j.y<0)j.y=canvas.height; if(j.y>canvas.height)j.y=0; });
+    
+    drawJet(p1, p1Color); drawJet(p2, '#ff0000');
+    
+    document.getElementById('p1-fill').style.width = Math.max(0, p1.hp) + '%';
+    document.getElementById('p2-fill').style.width = Math.max(0, p2.hp) + '%';
+    document.getElementById('p1-m').innerText = `MISSILES: ${p1.missiles}`;
+    document.getElementById('p2-m').innerText = `MISSILES: ${p2.missiles}`;
+
+    if(p1.missiles < 5) { p1.mTimer++; if(p1.mTimer > 250) { p1.missiles++; p1.mTimer = 0; } }
+    
+    if(p1.hp <= 0 || p2.hp <= 0) { running = false; finish(); }
+    if(running) requestAnimationFrame(loop);
+}
+
+function finish() {
+    const s = document.getElementById('win-screen');
+    const m = document.getElementById('win-msg');
+    s.style.display = 'flex';
+    m.innerText = p1.hp <= 0 ? "MAYDAY! EJECT!" : "SPLASH ONE!";
+    m.style.color = p1.hp <= 0 ? "#ff0000" : "#0f0";
+    setTimeout(() => {
+        s.style.display = 'none';
+        initSortie(gameMode);
+    }, 2000);
+}
+</script>
+</body>
+</html>
